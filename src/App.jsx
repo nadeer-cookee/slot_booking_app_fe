@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import io from "socket.io-client";
 
-const socket = io("http://localhost:5000", {
+const API_URL = "http://localhost:5000";
+// const API_URL = "http://13.234.175.111:5000";
+
+const socket = io(API_URL, {
   transports: ["websocket"],
   upgrade: false,
 });
-
-// const API_URL = "http://localhost:5000/api/slots";
-const API_URL = "http://13.234.175.111:5000/api";
-
 
 function App() {
   const [slots, setSlots] = useState([]);
@@ -16,12 +15,13 @@ function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [bookingStatus, setBookingStatus] = useState({});
 
   const fetchSlots = useCallback(async (page = 1) => {
     setIsLoading(true);
     try {
       const response = await fetch(
-        `${API_URL}/slots?page=${page}&limit=12`
+        `${API_URL}/api/slots?page=${page}&limit=12`
       );
       const data = await response.json();
       setSlots(data.docs);
@@ -49,15 +49,41 @@ function App() {
       );
     });
 
+    socket.on("bookingAttempt", ({ slotId }) => {
+      setBookingStatus((prev) => ({ ...prev, [slotId]: "attempting" }));
+    });
+
+    socket.on("bookingProcessStarted", ({ slotId }) => {
+      setBookingStatus((prev) => ({ ...prev, [slotId]: "processing" }));
+    });
+
+    socket.on("bookingSuccessful", ({ slotId }) => {
+      setBookingStatus((prev) => ({ ...prev, [slotId]: "success" }));
+      setSlots((prevSlots) =>
+        prevSlots.map((slot) =>
+          slot._id === slotId ? { ...slot, isBooked: true } : slot
+        )
+      );
+    });
+
+    socket.on("bookingFailed", ({ slotId, error }) => {
+      setBookingStatus((prev) => ({ ...prev, [slotId]: "failed" }));
+      alert(`Booking failed: ${error}`);
+    });
+
     return () => {
       socket.off("connect");
       socket.off("slotUpdate");
+      socket.off("bookingAttempt");
+      socket.off("bookingProcessStarted");
+      socket.off("bookingSuccessful");
+      socket.off("bookingFailed");
     };
   }, [fetchSlots]);
 
   const bookSlot = async (slotId) => {
     try {
-      const response = await fetch(`${API_URL}/book`, {
+      const response = await fetch(`${API_URL}/api/book`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -67,11 +93,12 @@ function App() {
       const data = await response.json();
 
       if (response.ok) {
-        alert(data.message);
+        setBookingStatus((prev) => ({ ...prev, [slotId]: "pending" }));
       } else {
         throw new Error(data.message);
       }
     } catch (error) {
+      setBookingStatus((prev) => ({ ...prev, [slotId]: "failed" }));
       alert("Booking failed: " + error.message);
     }
   };
@@ -79,6 +106,24 @@ function App() {
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
       fetchSlots(newPage);
+    }
+  };
+
+  const getButtonText = (slot) => {
+    if (slot.isBooked) return "Booked";
+    switch (bookingStatus[slot._id]) {
+      case "attempting":
+        return "Attempting...";
+      case "processing":
+        return "Processing...";
+      case "pending":
+        return "Pending...";
+      case "success":
+        return "Booked";
+      case "failed":
+        return "Book Now";
+      default:
+        return "Book Now";
     }
   };
 
@@ -106,7 +151,9 @@ function App() {
               {slots.map((slot) => (
                 <div
                   key={slot._id}
-                  className={`slot ${slot.isBooked ? "booked" : ""}`}
+                  className={`slot ${slot.isBooked ? "booked" : ""} ${
+                    bookingStatus[slot._id] || ""
+                  }`}
                 >
                   <div className="slot-info">
                     <p className="slot-date">
@@ -116,10 +163,15 @@ function App() {
                   </div>
                   <button
                     onClick={() => bookSlot(slot._id)}
-                    disabled={slot.isBooked}
+                    disabled={
+                      slot.isBooked ||
+                      ["attempting", "processing", "pending"].includes(
+                        bookingStatus[slot._id]
+                      )
+                    }
                     className="book-button"
                   >
-                    {slot.isBooked ? "Booked" : "Book Now"}
+                    {getButtonText(slot)}
                   </button>
                 </div>
               ))}

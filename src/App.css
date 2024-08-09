@@ -151,3 +151,20 @@ h1 {
   font-size: 16px;
   color: #586069;
 }
+
+.slot.attempting, .slot.processing, .slot.pending {
+  background-color: #fff9c4; /* Light yellow background */
+}
+
+.slot.success {
+  background-color: #c8e6c9; /* Light green background */
+}
+
+.slot.failed {
+  background-color: #ffcdd2; /* Light red background */
+}
+
+.book-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
