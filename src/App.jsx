@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import io from "socket.io-client";
 
-const API_URL = "http://localhost:5000";
-// const API_URL = "http://13.234.175.111:5000";
+// const API_URL = "http://localhost:5000";
+const API_URL = "http://13.234.175.111:5000";
 
 const socket = io(API_URL, {
   transports: ["websocket"],
